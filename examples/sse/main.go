@@ -33,7 +33,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/johnklnl/replicators"
+	"github.com/johnknl/replicators"
 )
 
 type t []byte

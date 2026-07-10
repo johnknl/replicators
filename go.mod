@@ -1,4 +1,4 @@
-module github.com/johnklnl/replicators
+module github.com/johnknl/replicators
 
 go 1.26
 

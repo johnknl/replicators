@@ -29,7 +29,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/johnklnl/replicators"
+	"github.com/johnknl/replicators"
 	"github.com/stretchr/testify/require"
 )
 
