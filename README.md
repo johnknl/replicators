@@ -8,14 +8,13 @@ Any situation where a Go value must be reliably broadcasted to a dynamic list of
 
 For example:
 
- - Broadcasting messages between Websocket clients
  - Republishing data from a message broker to SSE, Websocket or gRPC clients
+ - Broadcasting messages between Websocket clients
  - Internal event propagation to client goroutines
 
 ### Documentation and Examples
 
-GoDoc including examples are found on [https://pkg.go.dev/github.com/johnknl/replicators](pkg.go.dev)
-
+GoDoc including examples are found on [pkg.go.dev](https://pkg.go.dev/github.com/johnknl/replicators).
 A synthetic usage example is found in `./examples/sse/main.go`, runnable using `make run-example`.
 
 Although there are other use cases, I created this library for the purpose of scalable edge 
@@ -45,6 +44,7 @@ flowchart LR
 
 - Online attaching and detaching of subscribers
 - Automatic detaching of slow consumers
+- Comprehensive event handling mechanism
 - No 3rd party dependencies
 - Type safe
 - Tested, benchmarked, (partly) optimized
