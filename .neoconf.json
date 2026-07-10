@@ -1,0 +1,10 @@
+{
+  "lspconfig": {
+    "gopls": {
+      "gopls": {
+        "buildFlags": ["-tags=dev,unit,integration,functional"],
+        "env": { "GOFLAGS": "-tags=dev,unit,integration,functional" }
+      }
+    }
+  }
+}

@@ -1,0 +1,142 @@
+// MIT License
+//
+// Copyright (C) 2025 John Kleijn
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+
+package replicators
+
+import (
+	"context"
+	"errors"
+	"fmt"
+)
+
+var (
+	// ErrSubscriptionDropped is returned when a subscription is dropped.
+	// This happens when the subscriber is too slow to process messages and the tolerance is exceeded.
+	ErrSubscriptionDropped = errors.New("subscription dropped")
+
+	// ErrSubscriptionCancelled is returned when a subscription is cancelled.
+	// This happens when the subscriber cancels the subscription.
+	ErrSubscriptionCancelled = errors.New("subscription cancelled")
+)
+
+// Hub provides the frontend for interacting with the loop.
+// It provides an API for sending messages, subscribing to messages, and cancelling subscriptions.
+type Hub[T any] struct {
+	events   EventHandler[T]
+	messages chan<- T
+	attach   chan<- *Subscription[T]
+	detach   chan<- *Subscription[T]
+	stats    func(context.Context) *Stats
+}
+
+// NewHub creates a new sub.
+func NewHub[T any](ctx context.Context, opts ...func(*Options[T])) *Hub[T] {
+	loop := newLoop(NewOptions(opts...))
+
+	go loop.main(ctx)
+
+	return &Hub[T]{
+		events:   loop.events,
+		messages: loop.messages,
+		attach:   loop.attach,
+		detach:   loop.cancel,
+		stats:    loop.stats,
+	}
+}
+
+// Broadcast a message to subscribers.
+// If the context is canceled, this is effectively a no-op.
+func (s *Hub[T]) Broadcast(ctx context.Context, msg T) error {
+	select {
+	case <-ctx.Done():
+		if s.events != nil {
+			s.events.HandleEvent(ctx, EvtSendContextCancelled[T]{Msg: msg})
+		}
+
+		return ctx.Err()
+	case s.messages <- msg:
+		if s.events != nil {
+			s.events.HandleEvent(ctx, EvtSent[T]{Msg: msg})
+		}
+		return nil
+	}
+}
+
+// Cancel a subscription.
+// If the context is canceled, cancellation will fail.
+func (s *Hub[T]) Cancel(ctx context.Context, sub *Subscription[T]) error {
+	select {
+	case <-ctx.Done():
+		err := fmt.Errorf("cancel failed: %w", ctx.Err())
+		if s.events != nil {
+			s.events.HandleEvent(ctx, EvtCancelFailed[T]{Sub: sub, Err: err})
+		}
+		return err
+	case s.detach <- sub:
+		sub.setErr(ErrSubscriptionCancelled)
+		sub.close()
+		return ErrSubscriptionCancelled
+	}
+}
+
+// Subscribe to messages.
+//
+// When dealing with a subscriber that has very variable message processing
+// time, a larger buffer will help smooth things out. Otherwise, a buffer
+// of 1 is usually sufficient. The tolerance parameter is the number of messages
+// that can be dropped before the subscription is cancelled. If tolerance is equal
+// or lower than 0, the subscription will be cancelled immediately when a message
+// is dropped.
+//
+// The passed context is used to cancel the subscription. If the context is canceled,
+// the subscription will be cancelled and an error will be returned. Note that the
+// context is not the only way a subscription may be cancelled. If the subscriber is
+// too slow to process messages and the tolerance is exceeded, the subscription will
+// be cancelled in the main dispatch loop. In that case, the subscription's error will
+// be set to ErrSubscriptionDropped. When the context is canceled, the subscription's
+// error will be set to context.Context.Err().
+func (s *Hub[T]) Subscribe(ctx context.Context, bufferSize, tolerance int) (*Subscription[T], error) {
+	sub := newSubscription(ctx, s, bufferSize, tolerance)
+	select {
+	case <-ctx.Done():
+		sub.close()
+		err := fmt.Errorf("subscribe failed: %w", ctx.Err())
+		sub.setErr(err)
+		return nil, err
+	case s.attach <- sub:
+	}
+
+	return sub, nil
+}
+
+// Stats returns a snapshot of hub statistics.
+// When no CounterHandler is attached, the counts will be zero.
+// Note that calling this method will block the main dispatch
+// loop briefly while gathering metrics.
+//
+// The SnapshottingGuages event is emitted at the start
+// of the stats gathering process.
+//
+// Calling this method after shutdown may result in a deadlock
+// if the passed context is not canceled.
+func (s *Hub[T]) Stats(ctx context.Context) *Stats {
+	return s.stats(ctx)
+}
