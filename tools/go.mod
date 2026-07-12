@@ -6,7 +6,6 @@ require (
 	github.com/golangci/golangci-lint/v2 v2.12.2
 	golang.org/x/exp v0.0.0-20260611194520-c48552f49976
 	golang.org/x/perf v0.0.0-20260709024250-82a0b07e230d
-	golang.org/x/tools/cmd/godoc v0.1.0-deprecated
 	golang.org/x/vuln v1.5.0
 )
 
@@ -202,7 +201,6 @@ require (
 	github.com/yagipy/maintidx v1.0.0 // indirect
 	github.com/yeya24/promlinter v0.3.0 // indirect
 	github.com/ykadowak/zerologlint v0.1.5 // indirect
-	github.com/yuin/goldmark v1.7.13 // indirect
 	gitlab.com/bosi/decorder v0.4.2 // indirect
 	go-simpler.org/musttag v0.14.0 // indirect
 	go-simpler.org/sloglint v0.12.0 // indirect
@@ -218,7 +216,6 @@ require (
 	golang.org/x/telemetry v0.0.0-20260625142307-59b4966ccb57 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/tools v0.47.0 // indirect
-	golang.org/x/tools/godoc v0.1.0-deprecated // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
