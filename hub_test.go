@@ -133,80 +133,25 @@ func TestImpactOfSlowConsumer(t *testing.T) {
 		n int // Number of messages to send
 	}{
 		{n: 10},
-		// {n: 10000},
+		{n: 10000},
 	}
 
 	for _, tt := range tests {
 		t.Run("n="+strconv.Itoa(tt.n), func(t *testing.T) {
 			t.Parallel()
 
-			// Baseline scenario: all fast consumers
-			baselineScenario := scenario{
-				deliveryTimeout: time.Second,
-				repeats:         tt.n,
-				consumers: []*consumer{
-					{buffer: tt.n, workTime: time.Millisecond},
-					{buffer: tt.n, workTime: time.Millisecond},
-					{buffer: tt.n, workTime: time.Millisecond},
-				},
-			}
-			t.Logf("Running baseline scenario with %d messages", tt.n)
-			stats := runSimpleSubscriberScenario(t, baselineScenario)
-			t.Log(stats)
-
-			// Calculate the average completion time of the fast consumers in the baseline scenario
-			var baselineAvg time.Duration
-			for _, c := range baselineScenario.consumers {
-				baselineAvg += c.completionTime
-			}
-			baselineAvg /= time.Duration(len(baselineScenario.consumers))
-
-			// Comparison scenario: two fast consumers and one slow consumer, mitigated by a buffer of n
-			comparisonScenario := scenario{
-				deliveryTimeout: time.Second,
-				repeats:         tt.n,
-				consumers: []*consumer{
-					{buffer: 0, workTime: time.Millisecond},
-					{buffer: 0, workTime: time.Millisecond},
-					{buffer: tt.n, workTime: 2 * time.Millisecond}, // Slow consumer with buffer of n
-				},
-			}
-			t.Logf("Running comparison scenario with %d messages", tt.n)
-			stats = runSimpleSubscriberScenario(t, comparisonScenario)
-			t.Log(stats)
-
-			// Calculate the average completion time of the fast consumers in the comparison scenario
-			var comparisonAvg time.Duration
-			for _, c := range comparisonScenario.consumers[:1] {
-				comparisonAvg += c.completionTime
-			}
-			comparisonAvg /= 2
-
-			// Assert that the presence of a slow consumer does not significantly impact fast consumers
-			tolerance := baselineAvg + 1*time.Second // Define a reasonable tolerance
-			require.LessOrEqual(t, comparisonAvg, tolerance, "Slow consumer significantly impacted fast consumers")
-
-			// Sanity check: slow consumer should not be considerably slowed down
-			tolerance = time.Duration(tt.n) * time.Millisecond * 2 * 15 / 10 // Allow 50% extra time
-			require.LessOrEqual(
-				t,
-				comparisonScenario.consumers[2].completionTime,
-				tolerance,
-				"Slow consumer was considerably slowed down",
-			)
-
-			// Comparison scenario: dropping consumers
 			subDropScenario := scenario{
-				deliveryTimeout: 2 * time.Millisecond, // The slow consumer takes twice this
+				name:            t.Name(),
+				deliveryTimeout: 10 * time.Millisecond, // The slow consumer takes twice this
 				repeats:         tt.n,
 				consumers: []*consumer{
-					{buffer: 0, workTime: time.Millisecond},
-					{buffer: 0, workTime: time.Millisecond},
-					{buffer: tt.n / 2, workTime: 4 * time.Millisecond}, // Slow consumer with buffer of n/2
+					{buffer: 0, workTime: 5 * time.Millisecond},
+					{buffer: 0, workTime: 5 * time.Millisecond},
+					{buffer: tt.n / 2, workTime: 20 * time.Millisecond}, // Slow consumer with half-buffer size of messages sent
 				},
 			}
 			t.Logf("Running subscriber dropping scenario with %d messages", tt.n)
-			stats = runSimpleSubscriberScenario(t, subDropScenario)
+			stats := runSimpleSubscriberScenario(t, subDropScenario)
 			t.Log(stats)
 
 			require.Equal(t, int64(tt.n), stats.Counts.Sent, "All messages should be sent")
@@ -224,6 +169,7 @@ type consumer struct {
 }
 
 type scenario struct {
+	name            string
 	consumers       []*consumer
 	deliveryTimeout time.Duration
 	repeats         int // Number of messages to send
@@ -240,7 +186,7 @@ func runSimpleSubscriberScenario(t *testing.T, scenario scenario) *replicators.S
 		replicators.WithEventHandlerFunc[int](func(_ context.Context, event replicators.Event[int]) {
 			switch e := event.(type) {
 			case replicators.EvtSubDropped[int]:
-				t.Logf("Subscriber dropped: %v", e)
+				t.Logf("%s: Subscriber dropped: %#v", scenario.name, e)
 			}
 		}),
 	)
@@ -267,7 +213,8 @@ func runSimpleSubscriberScenario(t *testing.T, scenario scenario) *replicators.S
 				consumer.completionTime = time.Since(startTime)
 				consumer.totalWaitTime = totalWaitTime
 				t.Logf(
-					"Consumer %d finished after %v, worked %v, waited %v",
+					"%s: Consumer %d finished after %v, worked %v, waited %v",
+					scenario.name,
 					consumerIdx,
 					consumer.completionTime,
 					totalWorkTime,

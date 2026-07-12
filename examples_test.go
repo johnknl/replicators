@@ -23,10 +23,8 @@ package replicators_test
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"log/slog"
-	"math/big"
 	"os"
 	"sync"
 	"time"
@@ -36,28 +34,56 @@ import (
 
 type MyMsg int
 
-func ExampleHub_Subscribe_withRecieveBuffer() {
+func ExampleHub_Subscribe_withReceiveBuffer() {
 	buffSize := 10
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	hub := replicators.NewHub(ctx, replicators.WithDevLogger[MyMsg]())
+	subbed := make(chan struct{})
+
+	hub := replicators.NewHub(
+		ctx,
+		replicators.WithDevLogger[MyMsg](),
+		replicators.WithEventHandlerFunc[MyMsg](func(_ context.Context, e replicators.Event[MyMsg]) {
+			switch e.(type) {
+			case replicators.EvtSubscribed[MyMsg]:
+				// Because the default settings use a non-zero attach buffer, some of the data would be
+				// missed unless we sync. It would be more straightforward to use a zero attach buffer,
+				// but this is just an intentionally belabored example.
+				close(subbed)
+			}
+		}),
+	)
 
 	subscription, err := hub.Subscribe(ctx, buffSize, 0)
 	if err != nil {
 		panic(err)
 	}
 
+	// Wait for the subscription to be fully attached before broadcasting messages.
+	<-subbed
+
 	// fill up the buffer
 	for i := range buffSize {
 		_ = hub.Broadcast(ctx, MyMsg(i))
 	}
 
+	// read the messages from the receive buffer
 	for msg := range subscription.Data() {
 		fmt.Println(msg) // nolint:forbidigo // example code
-		n, _ := rand.Int(rand.Reader, big.NewInt(int64(buffSize)))
-		time.Sleep(time.Duration(n.Int64()) * time.Millisecond)
 	}
+
+	// Output:
+	// 0
+	// 1
+	// 2
+	// 3
+	// 4
+	// 5
+	// 6
+	// 7
+	// 8
+	// 9
 }
 
 func ExampleWithSendBuffer() {
@@ -90,7 +116,7 @@ func Example() {
 
 	hub := replicators.NewHub(
 		ctx,
-		replicators.WithDevLogger[MyMsg](),
+		// replicators.WithDevLogger[MyMsg](),
 		replicators.WithCounterHandler[MyMsg](),
 		replicators.WithEventHandler(replicators.EventHandlerFunc[MyMsg](func(_ context.Context, e replicators.Event[MyMsg]) {
 			switch e.(type) {
@@ -114,6 +140,8 @@ func Example() {
 		// dropped by the hub.
 		<-subscription.Data()
 		<-dropped
+
+		fmt.Println("error: " + subscription.Err().Error()) // nolint:forbidigo // example code
 	})
 
 	for i := range 3 {
@@ -122,6 +150,9 @@ func Example() {
 
 	wg.Wait()
 
-	// replicators.Counts{Subscriptions:1, Cancellations:1, Sent:3, Dropped:1, Delivered:1, Undeliverable:1}
 	fmt.Printf("%#v\n", hub.Stats(ctx).Counts) // nolint:forbidigo // example code
+
+	// Output:
+	// error: subscription dropped
+	// &replicators.Counts{Subscriptions:1, Cancellations:1, Sent:3, Dropped:1, Delivered:1, Undeliverable:1}
 }

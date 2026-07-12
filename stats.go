@@ -109,8 +109,8 @@ func (s *counters[T]) snap() *Counts {
 var _ EventHandler[any] = &CounterHandler[any]{}
 
 // WithCounterHandler adds a CounterHandler to the stream.
-func WithCounterHandler[T any]() func(*Options[T]) {
-	return func(s *Options[T]) {
+func WithCounterHandler[T any]() func(*Hub[T]) {
+	return func(s *Hub[T]) {
 		handler := NewCounterHandler[T]()
 		s.counters = handler.counters
 

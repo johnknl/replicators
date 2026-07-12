@@ -29,13 +29,13 @@ import (
 )
 
 // WithSlogger is a convenience function that sets up a slog.Logger as an event handler for the hub.
-func WithSlogger[T any](ctx context.Context, logger *slog.Logger) func(*Options[T]) {
+func WithSlogger[T any](ctx context.Context, logger *slog.Logger) func(*Hub[T]) {
 	return WithEventHandler(SlogEventHandler[T](ctx, logger))
 }
 
 // WithDevLogger is a convenience function that sets up a development logger using
 // the standard library's slog package.
-func WithDevLogger[T any]() func(*Options[T]) {
+func WithDevLogger[T any]() func(*Hub[T]) {
 	return WithEventHandler(DevLoggerHandler[T]())
 }
 

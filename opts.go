@@ -26,55 +26,24 @@ import (
 	"time"
 )
 
-// Options is a struct that holds the configuration options for the message stream.
-type Options[T any] struct {
-	counters *counters[T]
-
-	EventHandler         EventHandler[T]
-	SendBuffer           int
-	AttachBuffer         int
-	CancelBuffer         int
-	DeliveryTimeout      time.Duration
-	DrainDeliveryTimeout time.Duration
-}
-
-// NewOptions creates a new Options struct with the given modifiers applied.
-// The defaults are somewhat liberal with buffering, which may not suit
-// your use case if you prefer durability over throughput.
-func NewOptions[T any](modifiers ...func(*Options[T])) *Options[T] {
-	options := &Options[T]{
-		SendBuffer:           10,
-		AttachBuffer:         1,
-		CancelBuffer:         10,
-		DeliveryTimeout:      500 * time.Millisecond,
-		DrainDeliveryTimeout: 500 * time.Millisecond,
-	}
-
-	for _, modifier := range modifiers {
-		modifier(options)
-	}
-
-	return options
-}
-
 // WithEventHandlerFunc adds an EventHandler for the message stream.
-func WithEventHandlerFunc[T any](fn func(context.Context, Event[T])) func(*Options[T]) {
+func WithEventHandlerFunc[T any](fn func(context.Context, Event[T])) func(*Hub[T]) {
 	return WithEventHandler[T](EventHandlerFunc[T](fn))
 }
 
 // WithEventHandler adds an EventHandler for the message stream.
 // It will wrap any existing EventHandler.To set all event handlers,
 // use WithEventHandlers instead.
-func WithEventHandler[T any](handler EventHandler[T]) func(*Options[T]) {
-	return func(s *Options[T]) {
-		if s.EventHandler == nil {
-			s.EventHandler = handler
+func WithEventHandler[T any](handler EventHandler[T]) func(*Hub[T]) {
+	return func(s *Hub[T]) {
+		if s.events == nil {
+			s.events = handler
 			return
 		}
 
-		oldHandler := s.EventHandler
+		oldHandler := s.events
 
-		s.EventHandler = EventHandlerFunc[T](func(ctx context.Context, e Event[T]) {
+		s.events = EventHandlerFunc[T](func(ctx context.Context, e Event[T]) {
 			oldHandler.HandleEvent(ctx, e)
 			handler.HandleEvent(ctx, e)
 		})
@@ -82,10 +51,10 @@ func WithEventHandler[T any](handler EventHandler[T]) func(*Options[T]) {
 }
 
 // WithEventHandlers sets the EventHandler(s) for the message stream.
-func WithEventHandlers[T any](handlers ...EventHandler[T]) func(*Options[T]) {
+func WithEventHandlers[T any](handlers ...EventHandler[T]) func(*Hub[T]) {
 	if len(handlers) > 1 {
-		return func(s *Options[T]) {
-			s.EventHandler = EventHandlerFunc[T](func(ctx context.Context, e Event[T]) {
+		return func(s *Hub[T]) {
+			s.events = EventHandlerFunc[T](func(ctx context.Context, e Event[T]) {
 				for _, h := range handlers {
 					h.HandleEvent(ctx, e)
 				}
@@ -93,47 +62,46 @@ func WithEventHandlers[T any](handlers ...EventHandler[T]) func(*Options[T]) {
 		}
 	}
 
-	return func(s *Options[T]) {
-		s.EventHandler = handlers[0]
+	return func(s *Hub[T]) {
+		s.events = handlers[0]
 	}
 }
 
 // WithSendBuffer sets the buffer size for the send channel.
-func WithSendBuffer[T any](size int) func(*Options[T]) {
-	return func(s *Options[T]) {
-		s.SendBuffer = size
+func WithSendBuffer[T any](size int) func(*Hub[T]) {
+	return func(s *Hub[T]) {
+		s.messages = make(chan T, size)
 	}
 }
 
 // WithAttachBuffer sets the buffer size for the attach channel.
 // The attach channel is used to queue new subscribers.
 // Note that on shutdown, the attach buffer is discarded.
-func WithAttachBuffer[T any](size int) func(*Options[T]) {
-	return func(s *Options[T]) {
-		s.AttachBuffer = size
+func WithAttachBuffer[T any](size int) func(*Hub[T]) {
+	return func(s *Hub[T]) {
+		s.attach = make(chan *Subscription[T], size)
 	}
 }
 
 // WithCancelBuffer sets the buffer size for the cancel channel.
 // The cancel channel is used to cancel subscriptions.
 // Note that on shutdown, the cancel buffer is discarded.
-func WithCancelBuffer[T any](size int) func(*Options[T]) {
-	return func(s *Options[T]) {
-		s.CancelBuffer = size
+func WithCancelBuffer[T any](size int) func(*Hub[T]) {
+	return func(s *Hub[T]) {
+		s.cancel = make(chan *Subscription[T], size)
 	}
 }
 
 // WithDeliveryTimeout sets the maximum time to wait for a subscriber to process a message.
-func WithDeliveryTimeout[T any](timeout time.Duration) func(*Options[T]) {
-	return func(s *Options[T]) {
-		s.DeliveryTimeout = timeout
+func WithDeliveryTimeout[T any](timeout time.Duration) func(*Hub[T]) {
+	return func(s *Hub[T]) {
+		s.deliveryTimeout = timeout
 	}
 }
 
-// WithShutdownTimeout sets the maximum time for each subscriber to finish processing
-// messages during shutdown. Conceptually this is very similar to delivery timeout,
-func WithShutdownTimeout[T any](timeout time.Duration) func(*Options[T]) {
-	return func(s *Options[T]) {
-		s.DrainDeliveryTimeout = timeout
+// WithShutdownTimeout sets the maximum total time to wait for the hub to shutdown gracefully.
+func WithShutdownTimeout[T any](timeout time.Duration) func(*Hub[T]) {
+	return func(s *Hub[T]) {
+		s.shutdownTimeout = timeout
 	}
 }

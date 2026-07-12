@@ -26,40 +26,11 @@ import (
 	"time"
 )
 
-func newLoop[T any](options *Options[T]) *loop[T] {
-	return &loop[T]{
-		events:               options.EventHandler,
-		counters:             options.counters,
-		messages:             make(chan T, options.SendBuffer),
-		subscriptions:        make([]*Subscription[T], 0),
-		attach:               make(chan *Subscription[T], options.AttachBuffer),
-		cancel:               make(chan *Subscription[T], options.CancelBuffer),
-		gauges:               make(chan *Gauges),
-		sample:               make(chan struct{}),
-		deliveryTimeout:      options.DeliveryTimeout,
-		drainDeliveryTimeout: options.DrainDeliveryTimeout,
-	}
-}
-
-type loop[T any] struct {
-	counters *counters[T]
-	events   EventHandler[T]
-	messages chan T
-	attach   chan *Subscription[T]
-	cancel   chan *Subscription[T]
-	gauges   chan *Gauges
-	sample   chan struct{}
-
-	subscriptions        []*Subscription[T]
-	deliveryTimeout      time.Duration
-	drainDeliveryTimeout time.Duration
-}
-
-func (s *loop[T]) main(ctx context.Context) {
+func (s *Hub[T]) main(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			shutdownContext, cancel := context.WithTimeout(context.Background(), s.drainDeliveryTimeout)
+			shutdownContext, cancel := context.WithTimeout(context.Background(), s.shutdownTimeout)
 			s.shutdown(shutdownContext) // nolint:contextcheck // we want to use a new context here
 			cancel()
 			return
@@ -100,7 +71,7 @@ func (s *loop[T]) main(ctx context.Context) {
 	}
 }
 
-func (s *loop[T]) stats(ctx context.Context) *Stats {
+func (s *Hub[T]) stats(ctx context.Context) *Stats {
 	if s.events != nil {
 		s.events.HandleEvent(ctx, SnapshottingGuages[T]{})
 	}
@@ -125,7 +96,7 @@ func (s *loop[T]) stats(ctx context.Context) *Stats {
 	}
 }
 
-func (s *loop[T]) replicate(ctx context.Context, msg T) { // nolint: gocyclo // won't fix
+func (s *Hub[T]) replicate(ctx context.Context, msg T) { // nolint: gocyclo // won't fix
 	if len(s.subscriptions) == 0 {
 		if s.events != nil {
 			s.events.HandleEvent(ctx, EvtNoSubscribers[T]{Msg: msg})
@@ -204,7 +175,7 @@ func (s *loop[T]) replicate(ctx context.Context, msg T) { // nolint: gocyclo // 
 	s.subscriptions = s.subscriptions[:n]
 }
 
-func (s *loop[T]) shutdown(ctx context.Context) {
+func (s *Hub[T]) shutdown(ctx context.Context) {
 	if len(s.messages) > 0 {
 		if s.events != nil {
 			s.events.HandleEvent(ctx, EvtDraining{Count: len(s.messages)})

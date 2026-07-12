@@ -25,6 +25,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+)
+
+const (
+	// DefaultSendBuffer is the default size of the send buffer.
+	DefaultSendBuffer = 10
+
+	// DefaultAttachBuffer is the default size of the attach buffer.
+	DefaultAttachBuffer = 1
+
+	// DefaultCancelBuffer is the default size of the cancel buffer.
+	DefaultCancelBuffer = 1
+
+	// DefaultDeliveryTimeout is the default timeout for delivering messages to subscribers.
+	DefaultDeliveryTimeout = 100 * time.Millisecond
+
+	// DefaultShutdownTimeout is the default timeout for shutting down the hub.
+	DefaultShutdownTimeout = 10 * time.Second
 )
 
 var (
@@ -40,26 +58,51 @@ var (
 // Hub provides the frontend for interacting with the loop.
 // It provides an API for sending messages, subscribing to messages, and cancelling subscriptions.
 type Hub[T any] struct {
-	events   EventHandler[T]
-	messages chan<- T
-	attach   chan<- *Subscription[T]
-	detach   chan<- *Subscription[T]
-	stats    func(context.Context) *Stats
+	events EventHandler[T]
+
+	messages chan T
+	attach   chan *Subscription[T]
+	cancel   chan *Subscription[T]
+
+	counters *counters[T]
+	gauges   chan *Gauges
+	sample   chan struct{}
+
+	subscriptions   []*Subscription[T]
+	deliveryTimeout time.Duration
+	shutdownTimeout time.Duration
 }
 
 // NewHub creates a new sub.
-func NewHub[T any](ctx context.Context, opts ...func(*Options[T])) *Hub[T] {
-	loop := newLoop(NewOptions(opts...))
-
-	go loop.main(ctx)
-
-	return &Hub[T]{
-		events:   loop.events,
-		messages: loop.messages,
-		attach:   loop.attach,
-		detach:   loop.cancel,
-		stats:    loop.stats,
+func NewHub[T any](ctx context.Context, opts ...func(*Hub[T])) *Hub[T] {
+	hub := &Hub[T]{
+		subscriptions:   make([]*Subscription[T], 0),
+		gauges:          make(chan *Gauges),
+		sample:          make(chan struct{}),
+		deliveryTimeout: DefaultDeliveryTimeout,
+		shutdownTimeout: DefaultShutdownTimeout,
 	}
+
+	for _, modifier := range opts {
+		modifier(hub)
+	}
+
+	if hub.messages == nil {
+		hub.messages = make(chan T, DefaultSendBuffer)
+	}
+
+	if hub.attach == nil {
+		hub.attach = make(chan *Subscription[T], DefaultAttachBuffer)
+	}
+
+	if hub.cancel == nil {
+		hub.cancel = make(chan *Subscription[T], DefaultCancelBuffer)
+	}
+
+	go hub.main(ctx)
+
+	return hub
+
 }
 
 // Broadcast a message to subscribers.
@@ -90,7 +133,7 @@ func (s *Hub[T]) Cancel(ctx context.Context, sub *Subscription[T]) error {
 			s.events.HandleEvent(ctx, EvtCancelFailed[T]{Sub: sub, Err: err})
 		}
 		return err
-	case s.detach <- sub:
+	case s.cancel <- sub:
 		sub.setErr(ErrSubscriptionCancelled)
 		sub.close()
 		return ErrSubscriptionCancelled
