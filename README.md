@@ -1,20 +1,33 @@
 # Replicators
 
-Robust value replication library for high concurrency Go applications.
+Replicators is an in-process pub/sub fan-out library for high-concurrency Go applications. 
 
-## Use Cases
+Prioritizes bounded memory usage, predictable latency, and throughput over guaranteeing 
+delivery to slow consumers, even automatically detaching (dropping) slow consumers when
+needed.
 
-Any situation where a Go value must be broadcasted to a large dynamic list of subscribers.
+## Model
 
-For example:
+When a consumer is slow, one has the following options:
 
- - Republishing data from a message broker to SSE, Websocket or gRPC clients
- - Broadcasting messages between Websocket clients
- - Internal event propagation to client goroutines
+ 1. Apply backpressure: slow the producer.
+ 2. Buffer: absorb bursts (temporarily).
+ 3. Drop messages: sacrifice completeness.
+ 4. Drop consumers: sacrifice availability for those consumers.
+ 5. Persist to durable storage: let consumers catch up later.
+
+`replicators` combines the first four strategies.
+
+1. Once all buffers all full, broadcasting will start to block
+2. There's a "send" buffer, and every subscription has its own "receive buffer" (there's also dynamic
+   subscription buffers but they are not relevant to this problem)
+3. The hub will forego delivery of messages to subscribers after a hub-global timeout
+4. The hub will drop consumers after they've missed a configurable (`1-x`) number of messages
 
 ## Limitations
 
-No redelivery/retries.
+No redelivery/retries or seeking (since there is no persistence). If a consumer is dropped, it will 
+have to resubscribe and will not receive any messages sent in the mean time.
 
 ### Documentation and Examples
 
@@ -26,7 +39,7 @@ replication of broker messages. The below chart illustrates an example topology.
 
 ```mermaid
 flowchart LR
-    broker["Message Broker<br>Single Topic"]
+    broker["Message Broker<br>Event Stream"]
     consumer["Consumer Goroutine"]
     hub["Hub"]
 
