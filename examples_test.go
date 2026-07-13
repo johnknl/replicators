@@ -43,7 +43,6 @@ func ExampleHub_Subscribe_withReceiveBuffer() {
 
 	hub := replicators.NewHub(
 		ctx,
-		replicators.WithDevLogger[MyMsg](),
 		replicators.WithEventHandlerFunc[MyMsg](func(_ context.Context, e replicators.Event[MyMsg]) {
 			switch e.(type) {
 			case replicators.EvtSubscribed[MyMsg]:
@@ -55,7 +54,7 @@ func ExampleHub_Subscribe_withReceiveBuffer() {
 		}),
 	)
 
-	subscription, err := hub.Subscribe(ctx, buffSize, 0)
+	subscription, err := hub.Subscribe(ctx, replicators.WithReceiveBuffer[MyMsg](buffSize))
 	if err != nil {
 		panic(err)
 	}
@@ -112,30 +111,49 @@ func Example() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
+	start := make(chan struct{})
+	subbed := make(chan struct{})
 	dropped := make(chan struct{})
 
 	hub := replicators.NewHub(
 		ctx,
-		// replicators.WithDevLogger[MyMsg](),
+		replicators.WithDevLogger[MyMsg](),
 		replicators.WithCounterHandler[MyMsg](),
 		replicators.WithEventHandler(replicators.EventHandlerFunc[MyMsg](func(_ context.Context, e replicators.Event[MyMsg]) {
 			switch e.(type) {
+			case replicators.EvtSubscribed[MyMsg]:
+				close(subbed)
 			case replicators.EvtSubDropped[MyMsg]:
 				close(dropped)
 			}
 		})),
 	)
 
-	// Allow one message to be dropped
-	// First message is read, second delivery is dropped.
-	// After the third delivery is dropped, the subscription will be dropped.
-	subscription, err := hub.Subscribe(ctx, 0, 1)
-	if err != nil {
-		panic(err)
-	}
-
 	wg := sync.WaitGroup{}
+
 	wg.Go(func() {
+		// 1. The first message is never received
+		// 2. One message is read
+		// 3. Next delivery will be dropped by the hub (but tolerated)
+		// 4. Final delivery will be dropped by the hub, and the subscription will be dropped
+		for i := range 4 {
+			_ = hub.Broadcast(ctx, MyMsg(i))
+			if i == 0 {
+				close(start)
+				<-subbed
+			}
+		}
+	})
+
+	wg.Go(func() {
+		// Don't start the next consumer until the first send is dropped
+		<-start
+
+		subscription, err := hub.Subscribe(ctx, replicators.WithMaxDeliveryTimeouts[MyMsg](1))
+		if err != nil {
+			panic(err)
+		}
+
 		// We'll read one message, then block until the subscription is
 		// dropped by the hub.
 		<-subscription.Data()
@@ -144,15 +162,11 @@ func Example() {
 		fmt.Println("error: " + subscription.Err().Error()) // nolint:forbidigo // example code
 	})
 
-	for i := range 3 {
-		_ = hub.Broadcast(ctx, MyMsg(i+1))
-	}
-
 	wg.Wait()
 
 	fmt.Printf("%#v\n", hub.Stats(ctx).Counts) // nolint:forbidigo // example code
 
 	// Output:
 	// error: subscription dropped
-	// &replicators.Counts{Subscriptions:1, Cancellations:1, Sent:3, Dropped:1, Delivered:1, Undeliverable:1}
+	// &replicators.Counts{Subscriptions:1, Cancellations:1, Sent:4, Dropped:2, Delivered:1, Undeliverable:1}
 }

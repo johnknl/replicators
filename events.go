@@ -44,7 +44,7 @@ func (e EvtDrainCancelled) Name() EventName {
 	return "drain cancelled"
 }
 
-// EvtDraining is emitted when the stream is draining, and contains the number of messages left in the queue.
+// EvtDraining is emitted when the hub is draining, and contains the number of messages left in the queue.
 type EvtDraining struct{ Count int }
 
 // Name returns the name of the event.
@@ -52,7 +52,7 @@ func (e EvtDraining) Name() EventName {
 	return "draining queue"
 }
 
-// EvtShutdown is emitted when the stream is shutting down.
+// EvtShutdown is emitted when the hub is shutting down.
 type EvtShutdown struct{}
 
 // Name returns the name of the event.
@@ -84,7 +84,7 @@ func (e EvtDeliveryTimeout[T]) Message() T {
 	return e.Msg
 }
 
-// SnapshottingGuages is emitted when the stream is snapshotting its gauges.
+// SnapshottingGuages is emitted when the hub is snapshotting its gauges.
 type SnapshottingGuages[T any] struct{ Msg T }
 
 // Name returns the name of the event.
@@ -105,7 +105,7 @@ func (e EvtNoSubscribers[T]) Message() T {
 	return e.Msg
 }
 
-// EvtSent is emitted when a message is sent to the stream.
+// EvtSent is emitted when a message is sent to the hub.
 type EvtSent[T any] struct{ Msg T }
 
 // Name returns the name of the event.
@@ -113,7 +113,7 @@ func (e EvtSent[T]) Name() EventName {
 	return "message sent"
 }
 
-// Message returns the message that was sent to the stream.
+// Message returns the message that was sent to the hub.
 func (e EvtSent[T]) Message() T {
 	return e.Msg
 }

@@ -31,13 +31,18 @@ import (
 
 	"github.com/johnknl/replicators"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 )
 
-func TestStream_SendReceiveAndCancel(t *testing.T) {
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
+
+func TestHub_SendReceiveAndCancel(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	stream := replicators.NewHub(
+	hub := replicators.NewHub(
 		ctx,
 		replicators.WithSendBuffer[int](1),
 		replicators.WithCounterHandler[int](),
@@ -46,15 +51,15 @@ func TestStream_SendReceiveAndCancel(t *testing.T) {
 		replicators.WithCancelBuffer[int](0),
 	)
 
-	subscriber, err := stream.Subscribe(ctx, 0, 0)
+	subscriber, err := hub.Subscribe(ctx)
 	require.NoError(t, err)
 
-	err = stream.Broadcast(ctx, 1)
+	err = hub.Broadcast(ctx, 1)
 	require.NoError(t, err)
 
 	<-subscriber.Data()
 
-	stats := stream.Stats(ctx)
+	stats := hub.Stats(ctx)
 
 	require.Equal(t, 1, int(stats.Counts.Sent))
 	require.Equal(t, 0, int(stats.Counts.Dropped))
@@ -65,7 +70,7 @@ func TestStream_SendReceiveAndCancel(t *testing.T) {
 	require.ErrorIs(t, subscriber.Cancel(ctx), replicators.ErrSubscriptionCancelled)
 	require.ErrorIs(t, subscriber.Err(), replicators.ErrSubscriptionCancelled)
 
-	stats = stream.Stats(ctx)
+	stats = hub.Stats(ctx)
 	require.Equal(t, 0, stats.Gauges.Subscriptions)
 	require.Equal(t, 1, int(stats.Counts.Subscriptions))
 
@@ -77,14 +82,14 @@ func TestStream_SendReceiveAndCancel(t *testing.T) {
 	}
 }
 
-func TestStream_Shutdown(t *testing.T) {
+func TestHub_Shutdown(t *testing.T) {
 	t.Parallel()
 	rootCtx := t.Context()
 	producerCtx, producerCancel := context.WithCancel(rootCtx)
 
 	subCount := 10
 
-	stream := replicators.NewHub(
+	hub := replicators.NewHub(
 		producerCtx,
 		replicators.WithSendBuffer[int](subCount),
 		replicators.WithAttachBuffer[int](0),
@@ -95,13 +100,13 @@ func TestStream_Shutdown(t *testing.T) {
 	for i := range subCount {
 		consumerCtx, consumerCancel := context.WithCancel(rootCtx)
 		defer consumerCancel()
-		sub, err := stream.Subscribe(consumerCtx, 0, 0)
+		sub, err := hub.Subscribe(consumerCtx)
 		require.NoError(t, err)
 		subs[i] = sub
 	}
 
 	for i := range subCount {
-		err := stream.Broadcast(producerCtx, i)
+		err := hub.Broadcast(producerCtx, i)
 		require.NoError(t, err)
 	}
 
@@ -124,10 +129,18 @@ func TestStream_Shutdown(t *testing.T) {
 	require.Equal(t, subCount*subCount, int(count.Load()))
 }
 
-// TestImpactOfSlowConsumer tests the impact of a slow consumer on fast consumers.
-// This is NOT a benchmark but rather a rudimentary check. time.Sleep() + time.Since()
-// is not a precise way to use small units of time, but it should be good enough for this test.
-func TestImpactOfSlowConsumer(t *testing.T) {
+// TestDropScenario tests a scenario where a slow consumer is dropped
+// due to exceeding the delivery timeout.
+//
+// It also gathers some crude timings for illustrative purposes:
+//
+//	Consumer 0 finished after 51.67008903s, worked 51.644435846s, waited 18.713723ms
+//	Consumer 1 finished after 51.670075284s, worked 51.49508549s, waited 167.582507ms
+//	Consumer 2 finished after 2m15.624082738s, worked 2m15.607502618s, waited 9.464384ms
+//
+// This illustrates how the consumer right before a slow one spends the most time waiting.
+// There is backpressure into the consumer before as well.
+func TestDropScenario(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		n int // Number of messages to send
@@ -179,7 +192,7 @@ func runSimpleSubscriberScenario(t *testing.T, scenario scenario) *replicators.S
 	t.Helper()
 	ctx := t.Context()
 
-	stream := replicators.NewHub[int](ctx,
+	hub := replicators.NewHub[int](ctx,
 		replicators.WithAttachBuffer[int](0),
 		replicators.WithDeliveryTimeout[int](scenario.deliveryTimeout),
 		replicators.WithCounterHandler[int](),
@@ -196,7 +209,7 @@ func runSimpleSubscriberScenario(t *testing.T, scenario scenario) *replicators.S
 	start.Lock() // Lock the start mutex to ensure all consumers start at the same time
 
 	for consumerIdx, consumer := range scenario.consumers {
-		subscription, err := stream.Subscribe(ctx, consumer.buffer, 0)
+		subscription, err := hub.Subscribe(ctx, replicators.WithReceiveBuffer[int](consumer.buffer))
 		require.NoError(t, err)
 
 		wg.Go(func() {
@@ -232,7 +245,7 @@ func runSimpleSubscriberScenario(t *testing.T, scenario scenario) *replicators.S
 				consumer.repeats++
 				if consumer.repeats == scenario.repeats {
 					finish()
-					err = stream.Cancel(ctx, subscription)
+					err = hub.Cancel(ctx, subscription)
 					require.ErrorIs(t, err, replicators.ErrSubscriptionCancelled)
 					return
 				}
@@ -248,11 +261,11 @@ func runSimpleSubscriberScenario(t *testing.T, scenario scenario) *replicators.S
 	start.Unlock() // Signal all consumers to start processing
 
 	for i := range scenario.repeats {
-		err := stream.Broadcast(ctx, i)
+		err := hub.Broadcast(ctx, i)
 		require.NoError(t, err)
 	}
 
 	wg.Wait()
 
-	return stream.Stats(ctx)
+	return hub.Stats(ctx)
 }

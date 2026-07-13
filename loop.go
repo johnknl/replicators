@@ -137,14 +137,14 @@ func (s *Hub[T]) replicate(ctx context.Context, msg T) { // nolint: gocyclo // w
 				if s.events != nil {
 					s.events.HandleEvent(ctx, EvtDelivered[T]{Msg: msg})
 				}
-			case <-timer.C: // or stream level timeout
+			case <-timer.C: // or hub level timeout
 				if s.events != nil {
 					s.events.HandleEvent(ctx, EvtDeliveryTimeout[T]{Msg: msg, Timeout: s.deliveryTimeout})
 				}
 
-				sub.tolerance--
+				sub.maxTimeouts--
 
-				if sub.tolerance <= 0 {
+				if sub.maxTimeouts < 0 {
 					healthy = false
 					sub.setErr(ErrSubscriptionDropped)
 					sub.close()
@@ -203,6 +203,7 @@ func (s *Hub[T]) shutdown(ctx context.Context) {
 	}
 
 	// nil some things for GC
+	// these are all "backend" values
 	s.subscriptions = nil
 	s.messages = nil
 	s.attach = nil
@@ -214,5 +215,5 @@ func (s *Hub[T]) shutdown(ctx context.Context) {
 		s.events.HandleEvent(ctx, EvtShutdown{})
 	}
 
-	s.events = nil
+	// the event handler is still used by the frontend
 }

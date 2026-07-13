@@ -27,12 +27,12 @@ import (
 	"sync/atomic"
 )
 
-// Stats contains the current stats for the stream.
+// Stats contains the current stats for the hub.
 type Stats struct {
-	// Gauges contains the current gauges for the stream.
+	// Gauges contains the current gauges for the hub.
 	Gauges *Gauges
 
-	// Counts contains the current counts for the stream.
+	// Counts contains the current counts for the hub.
 	Counts *Counts
 }
 
@@ -40,21 +40,21 @@ func (s *Stats) String() string {
 	return fmt.Sprintf("Stats{Gauges:%+v Counts:%+v}", s.Gauges, s.Counts)
 }
 
-// Gauges contains the current gauges for the stream.
+// Gauges contains the current gauges for the hub.
 type Gauges struct {
 	// Queued is the current size of the message queue.
 	Queued int
 
 	// Subscriptions is the current number of subscribers
-	// attached to the stream.
+	// attached to the hub.
 	Subscriptions int
 
 	// Waiting is the current number of subscribers waiting
-	// to be attached to the stream.
+	// to be attached to the hub.
 	Waiting int
 
 	// Cancelling is the current number of subscribers waiting
-	// to be detached from the stream.
+	// to be detached from the hub.
 	Cancelling int
 
 	// Buffered is the current total number of messages buffered
@@ -63,7 +63,7 @@ type Gauges struct {
 	Buffered int
 }
 
-// Counts contains the current stats for the stream.
+// Counts contains the current stats for the hub.
 type Counts struct {
 	// Subscriptions is the total number of subscriptions created.
 	Subscriptions int64
@@ -108,13 +108,13 @@ func (s *counters[T]) snap() *Counts {
 
 var _ EventHandler[any] = &CounterHandler[any]{}
 
-// WithCounterHandler adds a CounterHandler to the stream.
+// WithCounterHandler adds a CounterHandler to the hub.
 func WithCounterHandler[T any]() func(*Hub[T]) {
 	return func(s *Hub[T]) {
 		handler := NewCounterHandler[T]()
 		s.counters = handler.counters
 
-		WithEventHandler[T](handler)(s)
+		WithEventHandler(handler)(s)
 	}
 }
 

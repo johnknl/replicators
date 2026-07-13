@@ -156,8 +156,8 @@ func (s *Hub[T]) Cancel(ctx context.Context, sub *Subscription[T]) error {
 // be cancelled in the main dispatch loop. In that case, the subscription's error will
 // be set to ErrSubscriptionDropped. When the context is canceled, the subscription's
 // error will be set to context.Context.Err().
-func (s *Hub[T]) Subscribe(ctx context.Context, bufferSize, tolerance int) (*Subscription[T], error) {
-	sub := newSubscription(ctx, s, bufferSize, tolerance)
+func (s *Hub[T]) Subscribe(ctx context.Context, opts ...func(*Subscription[T])) (*Subscription[T], error) {
+	sub := newSubscription(ctx, s, opts...)
 	select {
 	case <-ctx.Done():
 		sub.close()
@@ -182,4 +182,84 @@ func (s *Hub[T]) Subscribe(ctx context.Context, bufferSize, tolerance int) (*Sub
 // if the passed context is not canceled.
 func (s *Hub[T]) Stats(ctx context.Context) *Stats {
 	return s.stats(ctx)
+}
+
+// WithEventHandlerFunc adds an EventHandler for the hub.
+func WithEventHandlerFunc[T any](fn func(context.Context, Event[T])) func(*Hub[T]) {
+	return WithEventHandler(EventHandlerFunc[T](fn))
+}
+
+// WithEventHandler adds an EventHandler for the hub.
+// It will wrap any existing EventHandler.To set all event handlers,
+// use WithEventHandlers instead.
+func WithEventHandler[T any](handler EventHandler[T]) func(*Hub[T]) {
+	return func(s *Hub[T]) {
+		if s.events == nil {
+			s.events = handler
+			return
+		}
+
+		oldHandler := s.events
+
+		s.events = EventHandlerFunc[T](func(ctx context.Context, e Event[T]) {
+			oldHandler.HandleEvent(ctx, e)
+			handler.HandleEvent(ctx, e)
+		})
+	}
+}
+
+// WithEventHandlers sets the EventHandler(s) for the hub.
+func WithEventHandlers[T any](handlers ...EventHandler[T]) func(*Hub[T]) {
+	if len(handlers) > 1 {
+		return func(s *Hub[T]) {
+			s.events = EventHandlerFunc[T](func(ctx context.Context, e Event[T]) {
+				for _, h := range handlers {
+					h.HandleEvent(ctx, e)
+				}
+			})
+		}
+	}
+
+	return func(s *Hub[T]) {
+		s.events = handlers[0]
+	}
+}
+
+// WithSendBuffer sets the buffer size for the send channel.
+func WithSendBuffer[T any](size int) func(*Hub[T]) {
+	return func(s *Hub[T]) {
+		s.messages = make(chan T, size)
+	}
+}
+
+// WithAttachBuffer sets the buffer size for the attach channel.
+// The attach channel is used to queue new subscribers.
+// Note that on shutdown, the attach buffer is discarded.
+func WithAttachBuffer[T any](size int) func(*Hub[T]) {
+	return func(s *Hub[T]) {
+		s.attach = make(chan *Subscription[T], size)
+	}
+}
+
+// WithCancelBuffer sets the buffer size for the cancel channel.
+// The cancel channel is used to cancel subscriptions.
+// Note that on shutdown, the cancel buffer is discarded.
+func WithCancelBuffer[T any](size int) func(*Hub[T]) {
+	return func(s *Hub[T]) {
+		s.cancel = make(chan *Subscription[T], size)
+	}
+}
+
+// WithDeliveryTimeout sets the maximum time to wait for a subscriber to process a message.
+func WithDeliveryTimeout[T any](timeout time.Duration) func(*Hub[T]) {
+	return func(s *Hub[T]) {
+		s.deliveryTimeout = timeout
+	}
+}
+
+// WithShutdownTimeout sets the maximum total time to wait for the hub to shutdown gracefully.
+func WithShutdownTimeout[T any](timeout time.Duration) func(*Hub[T]) {
+	return func(s *Hub[T]) {
+		s.shutdownTimeout = timeout
+	}
 }

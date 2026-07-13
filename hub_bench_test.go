@@ -26,31 +26,29 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-
-	"github.com/stretchr/testify/require"
 )
 
 // BenchmarkReplication benchmarks the e2e replication of messages to multiple consumers.
 func BenchmarkReplication(b *testing.B) {
 	n := 10_000
-	yConsumers := []int{10, 100, 1000, 10_000}
+	yConsumers := []int{10, 1000}
 
 	for _, y := range yConsumers {
 		b.Run(fmt.Sprintf("%d consumers", y), func(b *testing.B) {
-			b.ReportAllocs()
-			ctx := context.Background()
-
-			for range b.N {
+			for b.Loop() {
+				ctx, cancel := context.WithCancel(b.Context())
 				wg := &sync.WaitGroup{}
 
 				// For the test we'll disable the attach buffer to avoid
 				// extra synchronization while ensuring that the broadcast
 				// only starts after all consumers have subscribed.
-				stream := NewHub[int](ctx, WithAttachBuffer[int](0))
+				hub := NewHub(ctx, WithAttachBuffer[int](0))
 
 				for range y {
-					subscription, err := stream.Subscribe(ctx, 10, 0)
-					require.NoError(b, err)
+					subscription, err := hub.Subscribe(ctx, WithReceiveBuffer[int](10))
+					if err != nil {
+						b.Fatalf("failed to subscribe: %v", err)
+					}
 
 					wg.Go(func() {
 						for range n {
@@ -60,10 +58,13 @@ func BenchmarkReplication(b *testing.B) {
 				}
 
 				for i := range n {
-					require.NoError(b, stream.Broadcast(ctx, i))
+					if err := hub.Broadcast(ctx, i); err != nil {
+						b.Fatalf("failed to broadcast: %v", err)
+					}
 				}
 
 				wg.Wait()
+				cancel()
 			}
 		})
 	}

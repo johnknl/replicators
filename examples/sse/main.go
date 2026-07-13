@@ -78,7 +78,7 @@ func main() {
 		Addr:              ":8888",
 		ReadHeaderTimeout: 5 * time.Second,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			sub, err := hub.Subscribe(r.Context(), 10, 0)
+			sub, err := hub.Subscribe(r.Context(), replicators.WithReceiveBuffer[t](10))
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return

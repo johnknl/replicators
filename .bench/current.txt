@@ -1,28 +1,19 @@
 goos: linux
 goarch: amd64
-pkg: github.com/johnklnl/replicators
+pkg: github.com/johnknl/replicators
 cpu: AMD Ryzen 9 5950X 16-Core Processor            
-BenchmarkReplication/10_consumers-32         	      37	  27570268 ns/op	    9152 B/op	     104 allocs/op
-BenchmarkReplication/10_consumers-32         	      51	  28024166 ns/op	    8316 B/op	     102 allocs/op
-BenchmarkReplication/10_consumers-32         	      37	  28680606 ns/op	    8428 B/op	     102 allocs/op
-BenchmarkReplication/10_consumers-32         	      49	  31082472 ns/op	    8591 B/op	     103 allocs/op
-BenchmarkReplication/10_consumers-32         	      40	  34097435 ns/op	    8246 B/op	     102 allocs/op
-BenchmarkReplication/100_consumers-32        	       5	 256772114 ns/op	   46628 B/op	     564 allocs/op
-BenchmarkReplication/100_consumers-32        	       5	 252102302 ns/op	   44355 B/op	     591 allocs/op
-BenchmarkReplication/100_consumers-32        	       5	 214211725 ns/op	   39201 B/op	     535 allocs/op
-BenchmarkReplication/100_consumers-32        	       6	 249005737 ns/op	   44516 B/op	     599 allocs/op
-BenchmarkReplication/100_consumers-32        	       4	 260692425 ns/op	   45896 B/op	     611 allocs/op
-BenchmarkReplication/1000_consumers-32       	       1	2212109842 ns/op	  891880 B/op	    6650 allocs/op
-BenchmarkReplication/1000_consumers-32       	       1	2325792058 ns/op	  572600 B/op	    6142 allocs/op
-BenchmarkReplication/1000_consumers-32       	       1	2165451434 ns/op	  572432 B/op	    6148 allocs/op
-BenchmarkReplication/1000_consumers-32       	       1	2060276426 ns/op	  573232 B/op	    6142 allocs/op
-BenchmarkReplication/1000_consumers-32       	       1	2151442537 ns/op	  587568 B/op	    6343 allocs/op
-BenchmarkReplication/10000_consumers-32      	       1	21232880227 ns/op	 9343456 B/op	   68540 allocs/op
-BenchmarkReplication/10000_consumers-32      	       1	22422427472 ns/op	 5055536 B/op	   60178 allocs/op
-BenchmarkReplication/10000_consumers-32      	       1	23869164393 ns/op	 4882672 B/op	   59996 allocs/op
-BenchmarkReplication/10000_consumers-32      	       1	23904803260 ns/op	 4921600 B/op	   59992 allocs/op
-BenchmarkReplication/10000_consumers-32      	       1	24078570206 ns/op	 5273016 B/op	   64808 allocs/op
+BenchmarkReplication/10_consumers-32         	      34	  34541427 ns/op	    9112 B/op	     107 allocs/op
+BenchmarkReplication/10_consumers-32         	      27	  43121735 ns/op	    8434 B/op	     104 allocs/op
+BenchmarkReplication/10_consumers-32         	      31	  39929577 ns/op	    7930 B/op	     103 allocs/op
+BenchmarkReplication/10_consumers-32         	      34	  44227445 ns/op	    7520 B/op	     101 allocs/op
+BenchmarkReplication/10_consumers-32         	      31	  37077690 ns/op	    7627 B/op	     101 allocs/op
+BenchmarkReplication/10_consumers-32         	      32	  36882388 ns/op	    7483 B/op	     101 allocs/op
+BenchmarkReplication/1000_consumers-32       	       1	2382223652 ns/op	 1044544 B/op	    7020 allocs/op
+BenchmarkReplication/1000_consumers-32       	       1	2710082509 ns/op	  588648 B/op	    6242 allocs/op
+BenchmarkReplication/1000_consumers-32       	       1	2720530744 ns/op	  499008 B/op	    5836 allocs/op
+BenchmarkReplication/1000_consumers-32       	       1	2504222818 ns/op	  548912 B/op	    5920 allocs/op
+BenchmarkReplication/1000_consumers-32       	       1	2894878111 ns/op	  596384 B/op	    6284 allocs/op
+BenchmarkReplication/1000_consumers-32       	       1	2973625779 ns/op	  480416 B/op	    5969 allocs/op
 PASS
-ok  	github.com/johnklnl/replicators	145.607s
-?   	github.com/johnklnl/replicators/examples	[no test files]
-?   	github.com/johnklnl/replicators/examples/sse	[no test files]
+ok  	github.com/johnknl/replicators	23.613s
+?   	github.com/johnknl/replicators/examples/sse	[no test files]

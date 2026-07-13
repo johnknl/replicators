@@ -29,24 +29,31 @@ import (
 
 // Subscription represents a subscription to a Hub.
 type Subscription[T any] struct {
-	ch        chan T
-	stream    *Hub[T]
-	ctx       context.Context
-	timer     *time.Timer
-	err       error
-	errMu     *sync.RWMutex
-	tolerance int
+	ch          chan T
+	hub         *Hub[T]
+	ctx         context.Context
+	timer       *time.Timer
+	err         error
+	errMu       sync.RWMutex
+	maxTimeouts int
 }
 
 // newSubscription creates a new subscription to a Hub with the given buffer size and tolerance.
-func newSubscription[T any](ctx context.Context, s *Hub[T], buffSize, tolerance int) *Subscription[T] {
-	return &Subscription[T]{
-		ctx:       ctx,
-		stream:    s,
-		tolerance: tolerance,
-		ch:        make(chan T, buffSize),
-		errMu:     &sync.RWMutex{},
+func newSubscription[T any](ctx context.Context, s *Hub[T], opts ...func(*Subscription[T])) *Subscription[T] {
+	sub := &Subscription[T]{
+		ctx: ctx,
+		hub: s,
 	}
+
+	for _, opt := range opts {
+		opt(sub)
+	}
+
+	if sub.ch == nil {
+		sub.ch = make(chan T)
+	}
+
+	return sub
 }
 
 // Data returns a read-only channel that receives data from the subscription.
@@ -64,7 +71,7 @@ func (s *Subscription[T]) Err() error {
 
 // Cancel cancels the subscription via the associated Hub.
 func (s *Subscription[T]) Cancel(ctx context.Context) error {
-	return s.stream.Cancel(ctx, s)
+	return s.hub.Cancel(ctx, s)
 }
 
 func (s *Subscription[T]) setErr(err error) {
@@ -75,4 +82,19 @@ func (s *Subscription[T]) setErr(err error) {
 
 func (s *Subscription[T]) close() {
 	close(s.ch)
+}
+
+// WithReceiveBuffer sets the receive buffer size for a subscription.
+func WithReceiveBuffer[T any](buffSize int) func(*Subscription[T]) {
+	return func(h *Subscription[T]) {
+		h.ch = make(chan T, buffSize)
+	}
+}
+
+// WithMaxDeliveryTimeouts sets the maximum number of timeouts before
+// a subscription is dropped.
+func WithMaxDeliveryTimeouts[T any](tolerance int) func(*Subscription[T]) {
+	return func(h *Subscription[T]) {
+		h.maxTimeouts = tolerance
+	}
 }
