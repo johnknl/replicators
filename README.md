@@ -4,13 +4,17 @@ Robust value replication library for high concurrency Go applications.
 
 ## Use Cases
 
-Any situation where a Go value must be reliably broadcasted to a dynamic list of subscribers.
+Any situation where a Go value must be broadcasted to a large dynamic list of subscribers.
 
 For example:
 
  - Republishing data from a message broker to SSE, Websocket or gRPC clients
  - Broadcasting messages between Websocket clients
  - Internal event propagation to client goroutines
+
+## Limitations
+
+No redelivery/retries.
 
 ### Documentation and Examples
 
