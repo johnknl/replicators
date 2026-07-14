@@ -27,7 +27,8 @@ When a consumer is slow, one has the following options:
 ## Limitations
 
 No redelivery/retries or seeking (since there is no persistence). If a consumer is dropped, it will 
-have to resubscribe and will not receive any messages sent in the mean time.
+have to resubscribe and will not receive any messages sent in the mean time, except for any configured
+"echo buffer".
 
 ### Documentation and Examples
 
@@ -79,6 +80,12 @@ websocat -v -H='Authorization: Bearer secret' ws://localhost:9001/foo/bar
 - Bundled slog event handler
 - Native stat (counters, gauges) handler, useful for integration with eg. Prometheus scraping
 - Echo: replicate the last n sent messages to new subscribers
+
+## Echo Buffer
+
+A hub can be configured to maintain a buffer of `n` messages to be sent to new subscribers upon
+connecting. If the same consumer subscribes again it may receive a message it had previously
+received through the old subscription.
 
 ## License
 
