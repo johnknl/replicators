@@ -85,19 +85,78 @@ func ExampleHub_Subscribe_withReceiveBuffer() {
 	// 9
 }
 
-func ExampleWithSendBuffer() {
+func ExampleWithEchoEnabled() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	replicators.NewHub(ctx, replicators.WithSendBuffer[MyMsg](3))
-}
 
-func ExampleWithAttachBuffer() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	replicators.NewHub(
-		ctx,
-		replicators.WithAttachBuffer[MyMsg](3),
+	dropped := make(chan struct{})
+	hub := replicators.NewHub(ctx,
+		replicators.WithDevLogger[MyMsg](),
+		replicators.WithEchoEnabled[MyMsg](),
+		replicators.WithEventHandlerFunc[MyMsg](func(_ context.Context, e replicators.Event[MyMsg]) {
+			if _, ok := e.(replicators.EvtSubDropped[MyMsg]); ok {
+				close(dropped)
+			}
+		}),
+		replicators.WithCounterHandler[MyMsg](),
 	)
+
+	// Broadcast a message, it'll be undeliverable because there are no subscribers,
+	// but the hub will remember it and send it to the next subscriber.
+	// This would be better accomplished with a send buffer but this is just
+	// part of the example.
+	if err := hub.Broadcast(ctx, MyMsg(42)); err != nil {
+		panic(err)
+	}
+
+	// Subscribe to the hub, the subscriber will receive the last message
+	// that was broadcasted.
+	subscription, err := hub.Subscribe(ctx)
+	if err != nil {
+		panic(err)
+	}
+
+	msg := <-subscription.Data()
+
+	fmt.Println(msg) // nolint:forbidigo // example code
+
+	// Now broadcast another message, the subscriber will receive it.
+	if err = hub.Broadcast(ctx, MyMsg(43)); err != nil {
+		panic(err)
+	}
+
+	msg = <-subscription.Data()
+
+	fmt.Println(msg) // nolint:forbidigo // example code
+
+	// Now subscribe to the hub again, the subscriber will receive the last message
+	// that was broadcasted.
+	subscription2, err := hub.Subscribe(ctx)
+	if err != nil {
+		panic(err)
+	}
+
+	msg = <-subscription2.Data()
+
+	fmt.Println(msg) // nolint:forbidigo // example code
+
+	// Now subscribe again, but don't read the message: subscriber is
+	// immediately subject to max delivery timeout (which defaults to 0 timeouts of 100ms).
+	_, err = hub.Subscribe(ctx)
+	if err != nil {
+		panic(err)
+	}
+
+	// Wait for the subscription to be dropped by the hub.
+	<-dropped
+
+	fmt.Printf("%#v\n", hub.Stats(ctx).Counts) // nolint:forbidigo // example code
+
+	// Output:
+	// 42
+	// 43
+	// 43
+	// &replicators.Counts{Subscriptions:3, Cancellations:0, Sent:2, Timeouts:1, Dropped:1, Delivered:3, Undeliverable:1}
 }
 
 func ExampleWithSlogger() {
@@ -168,5 +227,5 @@ func Example() {
 
 	// Output:
 	// error: subscription dropped
-	// &replicators.Counts{Subscriptions:1, Cancellations:1, Sent:4, Dropped:2, Delivered:1, Undeliverable:1}
+	// &replicators.Counts{Subscriptions:1, Cancellations:0, Sent:4, Timeouts:2, Dropped:1, Delivered:1, Undeliverable:1}
 }

@@ -67,10 +67,13 @@ type Hub[T any] struct {
 	counters *counters[T]
 	gauges   chan *Gauges
 	sample   chan struct{}
+	echo     T
 
 	subscriptions   []*Subscription[T]
 	deliveryTimeout time.Duration
 	shutdownTimeout time.Duration
+
+	echoEnabled bool
 }
 
 // NewHub creates a new sub.
@@ -261,5 +264,13 @@ func WithDeliveryTimeout[T any](timeout time.Duration) func(*Hub[T]) {
 func WithShutdownTimeout[T any](timeout time.Duration) func(*Hub[T]) {
 	return func(s *Hub[T]) {
 		s.shutdownTimeout = timeout
+	}
+}
+
+// WithEchoEnabled enables the echo feature.
+// When enabled, the hub will echo the last message sent to new subscribers.
+func WithEchoEnabled[T any]() func(*Hub[T]) {
+	return func(s *Hub[T]) {
+		s.echoEnabled = true
 	}
 }

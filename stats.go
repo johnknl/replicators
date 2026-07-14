@@ -71,12 +71,13 @@ type Counts struct {
 	// Cancellations is the total number of subscriptions cancelled.
 	Cancellations int64
 
-	// Sent is the total number of messages as counted when pushed on the queue.
+	// Sent is the total number of *messages* as counted when pushed on the queue.
 	Sent int64
 
-	// Dropped is the total number of copies/messages dropped. The count is somewhat ambiguous
-	// because a message dropped due to lack of subscribers is counted once, but for a single
-	// message sent, many copies may be counted if more subscribers are slow.
+	// Timeouts is the total number of *deliveries* abandoned due to timeout.
+	Timeouts int64
+
+	// Dropped is the total number of *subscriptions* dropped due to slow consumers.
 	Dropped int64
 
 	// Delivered is the total number of copies delivered.
@@ -88,10 +89,11 @@ type Counts struct {
 
 type counters[T any] struct {
 	subscriptions atomic.Int64
+	dropped       atomic.Int64
 	cancellations atomic.Int64
 	sent          atomic.Int64
 	undeliverable atomic.Int64
-	dropped       atomic.Int64
+	timeouts      atomic.Int64
 	delivered     atomic.Int64
 }
 
@@ -101,6 +103,7 @@ func (s *counters[T]) snap() *Counts {
 		Cancellations: s.cancellations.Load(),
 		Sent:          s.sent.Load(),
 		Dropped:       s.dropped.Load(),
+		Timeouts:      s.timeouts.Load(),
 		Delivered:     s.delivered.Load(),
 		Undeliverable: s.undeliverable.Load(),
 	}
@@ -133,13 +136,15 @@ func NewCounterHandler[T any]() *CounterHandler[T] {
 // HandleEvent updates the stats based on the event type.
 func (s *CounterHandler[T]) HandleEvent(_ context.Context, e Event[T]) {
 	switch e.(type) {
+	case EvtSubDropped[T]:
+		s.counters.dropped.Add(1)
 	case EvtDelivered[T]:
 		s.counters.delivered.Add(1)
 	case EvtDeliveryTimeout[T]:
-		s.counters.dropped.Add(1)
+		s.counters.timeouts.Add(1)
 	case EvtNoSubscribers[T], EvtSendContextCancelled[T]:
 		s.counters.undeliverable.Add(1)
-	case EvtCancelled[T], EvtSubDropped[T]:
+	case EvtCancelled[T]:
 		s.counters.cancellations.Add(1)
 	case EvtSubscribed[T]:
 		s.counters.subscriptions.Add(1)

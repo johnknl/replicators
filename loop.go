@@ -23,6 +23,7 @@ package replicators
 
 import (
 	"context"
+	"slices"
 	"time"
 )
 
@@ -47,11 +48,23 @@ func (s *Hub[T]) main(ctx context.Context) {
 				Buffered:      bufLen,
 			}
 		case msg := <-s.messages:
+			if s.echoEnabled {
+				s.echo = msg
+			}
 			s.replicate(ctx, msg)
 		case sub := <-s.attach:
 			s.subscriptions = append(s.subscriptions, sub)
+
 			if s.events != nil {
 				s.events.HandleEvent(ctx, EvtSubscribed[T]{Sub: sub})
+			}
+
+			if s.echoEnabled {
+				if !s.deliver(ctx, sub, s.echo) {
+					s.subscriptions = slices.DeleteFunc(s.subscriptions, func(ss *Subscription[T]) bool {
+						return ss == sub
+					})
+				}
 			}
 		case sub := <-s.cancel:
 			n := 0
@@ -106,66 +119,7 @@ func (s *Hub[T]) replicate(ctx context.Context, msg T) { // nolint: gocyclo // w
 
 	n := 0
 	for _, sub := range s.subscriptions {
-		healthy := true
-		select {
-		case <-sub.ctx.Done(): // assert subscription context not previously canceled
-			if s.events != nil {
-				s.events.HandleEvent(ctx, EvtCancelled[T]{Sub: sub})
-			}
-			healthy = false
-			sub.setErr(sub.ctx.Err())
-			sub.close()
-		case sub.ch <- msg: // check if the channel is even blocked before using a timer
-			if s.events != nil {
-				s.events.HandleEvent(ctx, EvtDelivered[T]{Msg: msg})
-			}
-		default:
-			if sub.timer == nil {
-				sub.timer = time.NewTimer(s.deliveryTimeout)
-			}
-
-			timer := sub.timer
-			if !timer.Stop() {
-				select {
-				case <-timer.C:
-				default:
-				}
-			}
-			timer.Reset(s.deliveryTimeout)
-			select {
-			case sub.ch <- msg: // send the message
-				if s.events != nil {
-					s.events.HandleEvent(ctx, EvtDelivered[T]{Msg: msg})
-				}
-			case <-timer.C: // or hub level timeout
-				if s.events != nil {
-					s.events.HandleEvent(ctx, EvtDeliveryTimeout[T]{Msg: msg, Timeout: s.deliveryTimeout})
-				}
-
-				sub.maxTimeouts--
-
-				if sub.maxTimeouts < 0 {
-					healthy = false
-					sub.setErr(ErrSubscriptionDropped)
-					sub.close()
-
-					if s.events != nil {
-						s.events.HandleEvent(ctx, EvtSubDropped[T]{Sub: sub})
-					}
-				}
-			case <-sub.ctx.Done(): // or subscription context canceled
-				healthy = false
-				sub.setErr(sub.ctx.Err())
-
-				if s.events != nil {
-					s.events.HandleEvent(ctx, EvtCancelled[T]{Sub: sub})
-				}
-			}
-
-			timer.Stop()
-		}
-
-		if healthy {
+		if s.deliver(ctx, sub, msg) {
 			s.subscriptions[n] = sub
 			n++
 		}
@@ -173,6 +127,69 @@ func (s *Hub[T]) replicate(ctx context.Context, msg T) { // nolint: gocyclo // w
 
 	clear(s.subscriptions[n:])
 	s.subscriptions = s.subscriptions[:n]
+}
+
+func (s *Hub[T]) deliver(ctx context.Context, sub *Subscription[T], msg T) bool {
+	healthy := true
+	select {
+	case <-sub.ctx.Done(): // assert subscription context not previously canceled
+		if s.events != nil {
+			s.events.HandleEvent(ctx, EvtCancelled[T]{Sub: sub})
+		}
+		healthy = false
+		sub.setErr(sub.ctx.Err())
+		sub.close()
+	case sub.ch <- msg: // check if the channel is even blocked before using a timer
+		if s.events != nil {
+			s.events.HandleEvent(ctx, EvtDelivered[T]{Msg: msg})
+		}
+	default:
+		if sub.timer == nil {
+			sub.timer = time.NewTimer(s.deliveryTimeout)
+		}
+
+		timer := sub.timer
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+		timer.Reset(s.deliveryTimeout)
+		select {
+		case sub.ch <- msg: // send the message
+			if s.events != nil {
+				s.events.HandleEvent(ctx, EvtDelivered[T]{Msg: msg})
+			}
+		case <-timer.C: // or hub level timeout
+			if s.events != nil {
+				s.events.HandleEvent(ctx, EvtDeliveryTimeout[T]{Msg: msg, Timeout: s.deliveryTimeout})
+			}
+
+			sub.maxTimeouts--
+
+			if sub.maxTimeouts < 0 {
+				healthy = false
+				sub.setErr(ErrSubscriptionDropped)
+				sub.close()
+
+				if s.events != nil {
+					s.events.HandleEvent(ctx, EvtSubDropped[T]{Sub: sub})
+				}
+			}
+		case <-sub.ctx.Done(): // or subscription context canceled
+			healthy = false
+			sub.setErr(sub.ctx.Err())
+
+			if s.events != nil {
+				s.events.HandleEvent(ctx, EvtCancelled[T]{Sub: sub})
+			}
+		}
+
+		timer.Stop()
+	}
+
+	return healthy
 }
 
 func (s *Hub[T]) shutdown(ctx context.Context) {

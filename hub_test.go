@@ -62,7 +62,7 @@ func TestHub_SendReceiveAndCancel(t *testing.T) {
 	stats := hub.Stats(ctx)
 
 	require.Equal(t, 1, int(stats.Counts.Sent))
-	require.Equal(t, 0, int(stats.Counts.Dropped))
+	require.Equal(t, 0, int(stats.Counts.Timeouts))
 	require.Equal(t, 1, int(stats.Counts.Subscriptions))
 
 	require.Equal(t, 1, stats.Gauges.Subscriptions)
@@ -168,7 +168,7 @@ func TestDropScenario(t *testing.T) {
 			t.Log(stats)
 
 			require.Equal(t, int64(tt.n), stats.Counts.Sent, "All messages should be sent")
-			require.Equal(t, int64(1), stats.Counts.Dropped, "Only the slow consumer should have been dropped")
+			require.Equal(t, int64(1), stats.Counts.Timeouts, "Only the slow consumer should have been dropped")
 		})
 	}
 }
