@@ -32,7 +32,6 @@ have to resubscribe and will not receive any messages sent in the mean time.
 ### Documentation and Examples
 
 GoDoc including examples are found on [pkg.go.dev](https://pkg.go.dev/github.com/johnknl/replicators).
-A synthetic usage example is found in `./examples/sse/main.go`, runnable using `make run-example`.
 
 Although there are other use cases, I created this library for the purpose of scalable edge 
 replication of broker messages. The below chart illustrates an example topology.
@@ -55,6 +54,14 @@ flowchart LR
     sub2 --> grpc2["gRPC Client"]
     sub3 --> ws1["WebSocket Client"]
     sub4 --> sse1["SSE Client"]
+```
+
+A more elaborate toy example of a WebSocket server with dynamic producers can be found the `./examples/`
+directory. I can recommend the [websocat](https://github.com/vi/websocat) tool to do some poking at it, eg:
+
+```sh
+go run ./examples/websocket/ &
+websocat -v -H='Authorization: Bearer secret' ws://localhost:9001/foo/bar
 ```
 
 ## Key Properties
