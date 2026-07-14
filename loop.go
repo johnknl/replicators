@@ -48,10 +48,12 @@ func (s *Hub[T]) main(ctx context.Context) {
 				Buffered:      bufLen,
 			}
 		case msg := <-s.messages:
-			if s.echoEnabled {
-				s.echo = msg
-			}
 			s.replicate(ctx, msg)
+
+			if s.echo != nil {
+				s.echo.Add(msg)
+			}
+
 		case sub := <-s.attach:
 			s.subscriptions = append(s.subscriptions, sub)
 
@@ -59,11 +61,13 @@ func (s *Hub[T]) main(ctx context.Context) {
 				s.events.HandleEvent(ctx, EvtSubscribed[T]{Sub: sub})
 			}
 
-			if s.echoEnabled {
-				if !s.deliver(ctx, sub, s.echo) {
-					s.subscriptions = slices.DeleteFunc(s.subscriptions, func(ss *Subscription[T]) bool {
-						return ss == sub
-					})
+			if s.echo != nil && !s.echo.Empty() {
+				for msg := range s.echo.Values() {
+					if !s.deliver(ctx, sub, msg) {
+						s.subscriptions = slices.DeleteFunc(s.subscriptions, func(ss *Subscription[T]) bool {
+							return ss == sub
+						})
+					}
 				}
 			}
 		case sub := <-s.cancel:

@@ -71,7 +71,7 @@ flowchart LR
 
 - Bundled slog event handler
 - Native stat (counters, gauges) handler, useful for integration with eg. Prometheus scraping
-- Echo: replicate the last sent message to new subscribers
+- Echo: replicate the last n sent messages to new subscribers
 
 ## License
 

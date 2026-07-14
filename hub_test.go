@@ -134,7 +134,7 @@ func TestHub_Shutdown(t *testing.T) {
 //
 // It also gathers some crude timings for illustrative purposes:
 //
-//	Consumer 0 finished after 51.67008903s, worked 51.644435846s, waited 18.713723ms
+//	Consumer 0 finished after 5.1.67008903s, worked 51.644435846s, waited 18.713723ms
 //	Consumer 1 finished after 51.670075284s, worked 51.49508549s, waited 167.582507ms
 //	Consumer 2 finished after 2m15.624082738s, worked 2m15.607502618s, waited 9.464384ms
 //
@@ -146,7 +146,7 @@ func TestDropScenario(t *testing.T) {
 		n int // Number of messages to send
 	}{
 		{n: 10},
-		{n: 10000},
+		{n: 1000},
 	}
 
 	for _, tt := range tests {

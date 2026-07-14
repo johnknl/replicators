@@ -67,13 +67,11 @@ type Hub[T any] struct {
 	counters *counters[T]
 	gauges   chan *Gauges
 	sample   chan struct{}
-	echo     T
+	echo     *Ring[T]
 
 	subscriptions   []*Subscription[T]
 	deliveryTimeout time.Duration
 	shutdownTimeout time.Duration
-
-	echoEnabled bool
 }
 
 // NewHub creates a new sub.
@@ -154,10 +152,11 @@ func (s *Hub[T]) Cancel(ctx context.Context, sub *Subscription[T]) error {
 //
 // The passed context is used to cancel the subscription. If the context is canceled,
 // the subscription will be cancelled and an error will be returned. Note that the
-// context is not the only way a subscription may be cancelled. If the subscriber is
-// too slow to process messages and the tolerance is exceeded, the subscription will
-// be cancelled in the main dispatch loop. In that case, the subscription's error will
-// be set to ErrSubscriptionDropped. When the context is canceled, the subscription's
+// context is not the only way a subscription may be detached.
+//
+// A subscription can also be cancelled by invoking Cancel() on the hub, and it will
+// be dropped if the subscriber is too slow to process messages and the tolerance is
+// exceeded. When the context is canceled, the subscription's
 // error will be set to context.Context.Err().
 func (s *Hub[T]) Subscribe(ctx context.Context, opts ...func(*Subscription[T])) (*Subscription[T], error) {
 	sub := newSubscription(ctx, s, opts...)
@@ -267,10 +266,10 @@ func WithShutdownTimeout[T any](timeout time.Duration) func(*Hub[T]) {
 	}
 }
 
-// WithEchoEnabled enables the echo feature.
-// When enabled, the hub will echo the last message sent to new subscribers.
-func WithEchoEnabled[T any]() func(*Hub[T]) {
+// WithEchoBuffer enables the echo feature.
+// When enabled, the hub will echo the last `n` messages sent, to new subscribers.
+func WithEchoBuffer[T any](n int) func(*Hub[T]) {
 	return func(s *Hub[T]) {
-		s.echoEnabled = true
+		s.echo = NewRing[T](n)
 	}
 }

@@ -85,14 +85,14 @@ func ExampleHub_Subscribe_withReceiveBuffer() {
 	// 9
 }
 
-func ExampleWithEchoEnabled() {
+func ExampleWithEchoBuffer() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	dropped := make(chan struct{})
 	hub := replicators.NewHub(ctx,
 		replicators.WithDevLogger[MyMsg](),
-		replicators.WithEchoEnabled[MyMsg](),
+		replicators.WithEchoBuffer[MyMsg](1),
 		replicators.WithEventHandlerFunc[MyMsg](func(_ context.Context, e replicators.Event[MyMsg]) {
 			if _, ok := e.(replicators.EvtSubDropped[MyMsg]); ok {
 				close(dropped)
