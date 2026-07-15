@@ -87,6 +87,11 @@ A hub can be configured to maintain a buffer of `n` messages to be sent to new s
 connecting. If the same consumer subscribes again it may receive a message it had previously
 received through the old subscription.
 
+## Event Handlers
+
+Event dispatching is on the hot path. Handlers should be very fast. Consider using `HubEventHandlerHub`,
+which creates a simple buffered event channel.
+
 ## License
 
 MIT

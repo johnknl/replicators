@@ -198,3 +198,45 @@ type EventHandlerFunc[T any] func(context.Context, Event[T])
 func (f EventHandlerFunc[T]) HandleEvent(ctx context.Context, e Event[T]) {
 	f(ctx, e)
 }
+
+// HubEventHandlerHub is an EventHandler that dispatches events to multiple EventHandlers using
+// a buffered channel.
+type HubEventHandlerHub[T any] struct {
+	ch       chan Event[T]
+	handlers []EventHandler[T]
+}
+
+// NewHubEventHandlerHub creates a new HubEventHandlerHub with the given buffer size and EventHandlers.
+func NewHubEventHandlerHub[T any](ctx context.Context, buffer int, handlers ...EventHandler[T]) *HubEventHandlerHub[T] {
+	hub := &HubEventHandlerHub[T]{
+		handlers: handlers,
+		ch:       make(chan Event[T], buffer),
+	}
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case e, ok := <-hub.ch:
+				if !ok {
+					return
+				}
+				for _, handler := range hub.handlers {
+					handler.HandleEvent(ctx, e)
+				}
+			}
+		}
+	}()
+
+	return hub
+}
+
+// HandleEvent dispatches the event to all registered EventHandlers.
+func (h *HubEventHandlerHub[T]) HandleEvent(ctx context.Context, e Event[T]) {
+	select {
+	case <-ctx.Done():
+		return
+	case h.ch <- e:
+	}
+}
